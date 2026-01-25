@@ -1,0 +1,16 @@
+{
+  "expo": {
+    "name": "PashuBazaar Scanner",
+    "slug": "pashubazaar-scanner",
+    "version": "1.0.0",
+    "scheme": "pashubazaar",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "com.pashubazaar.scanner"
+    }
+  }
+}
