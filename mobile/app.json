@@ -1,16 +1,16 @@
 {
   "expo": {
-    "name": "PashuBazaar Scanner",
-    "slug": "pashubazaar-scanner",
+    "name": "LiveHub Scanner",
+    "slug": "LiveHub-scanner",
     "version": "1.0.0",
-    "scheme": "pashubazaar",
+    "scheme": "LiveHub",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true
     },
     "android": {
-      "package": "com.pashubazaar.scanner"
+      "package": "com.LiveHub.scanner"
     }
   }
 }

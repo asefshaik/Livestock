@@ -22,7 +22,7 @@ app.add_middleware(
 # ── Models setup ──────────────────────────────────────────────────────────────
 # Load YOLOv8 model for animal detection
 # yolov8n.pt will be downloaded automatically on first run if missing
-yolo_model = YOLO("yolov8n.pt")
+yolo_model = YOLO("best.pt")
 
 # Initialize MediaPipe Pose with graceful fallback for newer API versions
 has_mediapipe = False
@@ -181,7 +181,8 @@ def process_image_pipeline(image: np.ndarray) -> dict:
     )
     
     final_score = int(round(max(0, min(100, final_score))))
-    status = "healthy" if final_score > 85 else ("moderate" if final_score >= 60 else "risk")
+    # Adjusted thresholds for better accuracy - 57+ is moderate quality
+    status = "healthy" if final_score > 70 else ("moderate" if final_score >= 45 else "risk")
     
     return {
         "healthScore": final_score,
@@ -251,7 +252,8 @@ def process_video_pipeline(video_bytes: bytes) -> dict:
     )
     
     final_score = int(round(max(0, min(100, final_score))))
-    status = "healthy" if final_score > 85 else ("moderate" if final_score >= 60 else "risk")
+    # Adjusted thresholds for better accuracy
+    status = "healthy" if final_score > 70 else ("moderate" if final_score >= 45 else "risk")
     
     return {
         "healthScore": final_score,
@@ -448,32 +450,79 @@ async def analyze_frame(req: FrameRequest):
         raise HTTPException(status_code=500, detail=f"Frame analysis failed: {str(e)}")
 
 
-@app.post("/analyze")
-async def analyze(file: UploadFile = File(...)):
-    """
-    Accept an image or video and return a computer vision based health score.
-    (Kept for backward compatibility.)
-    """
-    content_type = (file.content_type or "").lower()
-    is_video = content_type.startswith("video/")
+class AnalyzeRequest(BaseModel):
+    images: list[str]                 # List of base64-encoded images
+    animalType: str = "other"         # e.g. "cattle", "goat", "sheep"
+    breed: str = ""                   # e.g. "Holstein", "Angus"
 
-    file_bytes = await file.read()
-    if len(file_bytes) == 0:
-        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+
+@app.post("/analyze")
+async def analyze(req: AnalyzeRequest):
+    """
+    Accept a list of base64-encoded images and return a computer vision based health score.
+    Accepts JSON with images array, animalType, and breed.
+    """
+    if not req.images or len(req.images) == 0:
+        raise HTTPException(status_code=400, detail="No images provided for analysis")
 
     try:
-        if is_video:
-            result = process_video_pipeline(file_bytes)
-        else:
-            nparr = np.frombuffer(file_bytes, np.uint8)
-            img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-            if img is None:
-                raise ValueError("Invalid image file format.")
-            h, w = img.shape[:2]
-            if w > 1280 or h > 1280:
-                scale = 1280 / max(w, h)
-                img = cv2.resize(img, (int(w * scale), int(h * scale)))
-            result = process_image_pipeline(img)
+        print(f"[ANALYZE] Started analysis for {req.animalType}, Breed: {req.breed}")
+        print(f"[ANALYZE] Received {len(req.images)} images")
+        
+        all_results = []
+        
+        for idx, image_b64 in enumerate(req.images):
+            try:
+                print(f"[ANALYZE] Processing image {idx + 1}/{len(req.images)}")
+                
+                # Decode base64 → numpy image
+                img_bytes = base64.b64decode(image_b64)
+                nparr = np.frombuffer(img_bytes, np.uint8)
+                img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+                
+                if img is None:
+                    print(f"[ANALYZE] Warning: Image {idx + 1} decode failed, skipping")
+                    continue
+                
+                print(f"[ANALYZE] Image {idx + 1} decoded: {img.shape}")
+                
+                # Resize if too large
+                h, w = img.shape[:2]
+                if w > 1280 or h > 1280:
+                    scale = 1280 / max(w, h)
+                    img = cv2.resize(img, (int(w * scale), int(h * scale)))
+                
+                # Run analysis on this image
+                print(f"[ANALYZE] Running health analysis on image {idx + 1}")
+                result = process_image_pipeline(img)
+                all_results.append(result)
+                print(f"[ANALYZE] Image {idx + 1} health score: {result['healthScore']}")
+                
+            except Exception as e:
+                print(f"[ANALYZE] Error processing image {idx + 1}: {str(e)}")
+                import traceback
+                traceback.print_exc()
+                continue
+        
+        print(f"[ANALYZE] Processed {len(all_results)} images successfully")
+        
+        if not all_results:
+            print(f"[ANALYZE] ERROR: Could not process any images")
+            raise ValueError("Could not process any of the provided images. Please ensure images are in valid format.")
+        
+        # Average results across all images
+        avg_health_score = int(round(sum(r["healthScore"] for r in all_results) / len(all_results)))
+        # Use the most common status
+        statuses = [r["status"] for r in all_results]
+        final_status = max(set(statuses), key=statuses.count) if statuses else "unknown"
+        
+        print(f"[ANALYZE] Final health score: {avg_health_score}, Status: {final_status}")
+        
+        return {
+            "healthScore": avg_health_score,
+            "status": final_status,
+            "analysis": f"Analyzed {len(all_results)} image(s). Animal type: {req.animalType}, Breed: {req.breed}"
+        }
 
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
@@ -481,11 +530,6 @@ async def analyze(file: UploadFile = File(...)):
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"AI analysis failed: {str(e)}")
-
-    return {
-        "healthScore": result["healthScore"],
-        "status": result["status"]
-    }
 
 
 if __name__ == "__main__":

@@ -1,0 +1,13 @@
+train: ../train/images
+val: ../valid/images
+test: ../test/images
+
+nc: 5
+names: ['1', '2', '3', '4', '4 0 0 0 1 1 1 1 0 0 0']
+
+roboflow:
+  workspace: ganesh-krop5
+  project: livestock-6qocl
+  version: 1
+  license: CC BY 4.0
+  url: https://universe.roboflow.com/ganesh-krop5/livestock-6qocl/dataset/1

@@ -1,62 +1,412 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion } from 'framer-motion'
+import { Camera, Upload, X, Loader } from 'lucide-react'
 import Navbar from '../components/Navbar'
 import Footer from '../components/Footer'
 import HealthScoreBadge from '../components/HealthScoreBadge'
 import api from '../api/axios'
 
-const HealthScanModal = ({ livestockId, onClose }) => (
-  <AnimatePresence>
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+const HealthScanModal = ({ livestock, onClose, onComplete }) => {
+  const videoRef = useRef(null)
+  const canvasRef = useRef(null)
+  const fileInputRef = useRef(null)
+
+  const [cameraActive, setCameraActive] = useState(false)
+  const [images, setImages] = useState([])
+  const [analyzing, setAnalyzing] = useState(false)
+  const [error, setError] = useState('')
+  const [healthReport, setHealthReport] = useState(null)
+  const [step, setStep] = useState('capture') // capture or report
+
+  // Initialize with stored reference photos (only Front and Side)
+  useEffect(() => {
+    const referencePhotos = []
+    
+    // Check if livestock has new imageLabels structure (new format)
+    if (livestock.imageLabels && Array.isArray(livestock.imageLabels)) {
+      const labelMap = {
+        'front': '📷 Front View',
+        'side': '📷 Side View',
+        'back': '📷 Back View',
+        'extra': '➕ Extra'
+      }
+      
+      // Only prioritize Front and Side (skip Back)
+      livestock.imageLabels.forEach(img => {
+        if (['front', 'side'].includes(img.label)) {
+          referencePhotos.push({ 
+            url: img.url, 
+            label: labelMap[img.label],
+            isReference: true 
+          })
+        }
+      })
+      
+      // Add extra images if available
+      livestock.imageLabels.forEach(img => {
+        if (img.label === 'extra') {
+          referencePhotos.push({ 
+            url: img.url, 
+            label: labelMap[img.label],
+            isReference: true 
+          })
+        }
+      })
+    }
+    // Fallback to old format (photoFront, photoBack, photoSide) for backwards compatibility
+    else {
+      if (livestock.photoFront) {
+        referencePhotos.push({ 
+          url: livestock.photoFront, 
+          label: '📷 Front View',
+          isReference: true 
+        })
+      }
+      if (livestock.photoSide) {
+        referencePhotos.push({ 
+          url: livestock.photoSide, 
+          label: '📷 Side View',
+          isReference: true 
+        })
+      }
+    }
+
+    setImages(referencePhotos)
+  }, [livestock.imageLabels, livestock.photoFront, livestock.photoBack, livestock.photoSide])
+
+  // Initialize camera - optional feature
+  useEffect(() => {
+    let isMounted = true
+    
+    const initCamera = async () => {
+      try {
+        if (!videoRef.current) return
+
+        // Try to access camera with minimal constraints
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: true,  // Accept any camera
+          audio: false
+        })
+        
+        if (!isMounted) {
+          stream.getTracks().forEach(track => track.stop())
+          return
+        }
+        
+        videoRef.current.srcObject = stream
+        videoRef.current.play().catch(err => {
+          console.warn('Autoplay failed:', err)
+        })
+        setCameraActive(true)
+        setError('')
+      } catch (err) {
+        console.warn('Camera not available:', err.name)
+        setCameraActive(false)
+        // Don't show error - camera is optional
+      }
+    }
+
+    const timer = setTimeout(initCamera, 300)
+
+    return () => {
+      isMounted = false
+      clearTimeout(timer)
+      if (videoRef.current?.srcObject) {
+        videoRef.current.srcObject.getTracks().forEach(track => track.stop())
+      }
+    }
+  }, [])
+
+  // Capture image
+  const captureImage = () => {
+    if (!videoRef.current || !canvasRef.current) return
+
+    const context = canvasRef.current.getContext('2d')
+    canvasRef.current.width = videoRef.current.videoWidth
+    canvasRef.current.height = videoRef.current.videoHeight
+    context.drawImage(videoRef.current, 0, 0)
+
+    canvasRef.current.toBlob(blob => {
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        setImages([...images, { url: e.target.result, timestamp: new Date().toLocaleTimeString() }])
+      }
+      reader.readAsDataURL(blob)
+    }, 'image/jpeg', 0.5)
+  }
+
+  // Handle file upload
+  const handleFileUpload = (e) => {
+    const files = Array.from(e.target.files || [])
+    files.forEach(file => {
+      const reader = new FileReader()
+      reader.onload = (event) => {
+        setImages(prev => [...prev, { url: event.target.result, timestamp: new Date().toLocaleTimeString() }])
+      }
+      reader.readAsDataURL(file)
+    })
+  }
+
+  // Submit analysis
+  const submitAnalysis = async () => {
+    if (images.length === 0) {
+      setError('Please use the reference photos or capture images')
+      return
+    }
+
+    if (images.length > 0 && !livestock.animalType) {
+      setError('Animal type not specified. Please try again.')
+      return
+    }
+
+    setAnalyzing(true)
+    setError('')
+
+    try {
+      // Use ALL images from livestock (not just filtered reference images)
+      const allImagesToAnalyze = livestock.imageLabels && livestock.imageLabels.length > 0
+        ? livestock.imageLabels.map(il => ({ url: il.url }))
+        : images
+
+      const imageBlobs = await Promise.all(
+        allImagesToAnalyze.map(img =>
+          fetch(img.url)
+            .then(r => r.blob())
+            .then(blob => new File([blob], 'image.jpg', { type: 'image/jpeg' }))
+        )
+      )
+
+      const formData = new FormData()
+      imageBlobs.forEach((blob, idx) => {
+        formData.append('images', blob, `image_${idx}.jpg`)
+      })
+
+      const response = await api.post(`/livestock/analyze/${livestock._id}`, formData)
+
+      setHealthReport(response.data.data)
+      setStep('report')
+      setAnalyzing(false)
+      onComplete()
+    } catch (err) {
+      const errorMessage = err.response?.data?.message || err.response?.data?.detail || 'Analysis failed.'
+      
+      // Provide specific error messages for common issues
+      if (err.response?.status === 403) {
+        setError('🔒 Permission denied: Only the livestock owner can request health analysis.')
+      } else if (err.response?.status === 422 && errorMessage.includes('Animal mismatch')) {
+        setError(`🐄 ${errorMessage}`)
+      } else if (errorMessage.includes('does not have access')) {
+        setError('🔒 You do not have permission to analyze this livestock.')
+      } else {
+        setError(errorMessage)
+      }
+      
+      setAnalyzing(false)
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto"
       onClick={onClose}
     >
       <motion.div
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
-        exit={{ scale: 0.9, opacity: 0 }}
         onClick={e => e.stopPropagation()}
-        className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl"
+        className="bg-white rounded-3xl p-8 max-w-2xl w-full shadow-2xl my-8"
       >
-        <div className="text-center">
-          <div className="w-20 h-20 bg-emerald-100 rounded-3xl flex items-center justify-center mx-auto mb-6">
-            <span className="text-4xl">📱</span>
-          </div>
-          <h3 className="text-2xl font-black text-gray-900 mb-3">AI Health Scanning</h3>
-          <p className="text-gray-500 leading-relaxed mb-6">
-            Open the <strong>PashuBazaar Mobile App</strong> and type this Animal ID manually to start scanning:
-            <br/><br/>
-            <strong className="text-emerald-800 bg-emerald-100 px-4 py-2 rounded-xl text-lg tracking-wider select-all border border-emerald-200 shadow-sm">{livestockId}</strong>
-          </p>
-          <div className="bg-emerald-50 rounded-2xl p-4 mb-6 text-left space-y-2">
-            <div className="flex items-center gap-3 text-sm text-gray-700">
-              <span className="text-emerald-600">✓</span> Point your phone camera or upload a video
-            </div>
-            <div className="flex items-center gap-3 text-sm text-gray-700">
-              <span className="text-emerald-600">✓</span> AI analyses health indicators in real-time
-            </div>
-            <div className="flex items-center gap-3 text-sm text-gray-700">
-              <span className="text-emerald-600">✓</span> Score (0-100) updates on this listing instantly
-            </div>
-          </div>
-          <div className="flex gap-3">
-            <button className="btn-primary flex-1 py-3">
-              📲 Download App
-            </button>
-            <button onClick={onClose} className="btn-secondary flex-1 py-3">
-              Close
-            </button>
-          </div>
+        {/* Header */}
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="text-3xl font-black text-gray-900">AI Health Scan</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <X className="w-6 h-6" />
+          </button>
         </div>
+
+        {error && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm flex items-start justify-between gap-3">
+            <span>{error}</span>
+            <button onClick={() => setError('')} className="text-red-400 hover:text-red-600 flex-shrink-0">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
+        {step === 'capture' ? (
+          <>
+            {/* Info Banner */}
+            <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 mb-6 flex items-start gap-3">
+              <span className="text-lg flex-shrink-0">ℹ️</span>
+              <div className="text-sm">
+                <p className="font-semibold text-emerald-900">📸 All your photos ready for analysis!</p>
+                <p className="text-emerald-700 text-xs mt-1">
+                  {livestock.imageLabels?.length || 0} image{livestock.imageLabels?.length !== 1 ? 's' : ''} will be used for AI health analysis. 
+                  More photos = more accurate results. You can add additional photos to improve accuracy.
+                </p>
+              </div>
+            </div>
+
+            {/* Upload Section - Primary method */}
+            <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-2xl p-8 mb-6 border-2 border-blue-200">
+              <div className="text-center">
+                <div className="text-5xl mb-3">📤</div>
+                <h4 className="font-bold text-gray-900 mb-2">Add More Photos (Optional)</h4>
+                <p className="text-sm text-gray-600 mb-4">
+                  Add additional photos from different angles for enhanced AI analysis
+                </p>
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={analyzing}
+                  className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white px-8 py-3 rounded-lg font-bold transition-colors"
+                >
+                  📁 Add More Photos
+                </button>
+              </div>
+            </div>
+
+            {/* OR Divider */}
+            <div className="flex items-center gap-3 mb-6">
+              <div className="flex-1 h-px bg-gray-300"></div>
+              <span className="text-gray-500 text-sm font-medium">OR</span>
+              <div className="flex-1 h-px bg-gray-300"></div>
+            </div>
+
+            {/* Camera Section - Optional */}
+            {cameraActive ? (
+              <div className="bg-black rounded-2xl overflow-hidden mb-6">
+                <div className="relative w-full" style={{ paddingBottom: '75%', backgroundColor: '#000' }}>
+                  <video
+                    ref={videoRef}
+                    autoPlay={true}
+                    playsInline={true}
+                    muted={true}
+                    className="absolute top-0 left-0 w-full h-full object-cover"
+                  />
+                </div>
+                <canvas ref={canvasRef} className="hidden" />
+                <div className="bg-gray-900 p-4 flex gap-3">
+                  <button
+                    onClick={captureImage}
+                    disabled={analyzing}
+                    className="flex-1 bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-600 text-white py-3 rounded-lg font-bold flex items-center justify-center gap-2 transition-colors"
+                  >
+                    <Camera className="w-5 h-5" />
+                    Capture
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
+            <input
+              type="file"
+              ref={fileInputRef}
+              multiple
+              accept="image/*"
+              onChange={handleFileUpload}
+              className="hidden"
+            />
+
+            {/* Image Gallery */}
+            {images.length > 0 && (
+              <div className="mb-6">
+                <h4 className="font-bold text-gray-900 mb-3">
+                  📸 All Uploaded Images ({livestock.imageLabels?.length || 0} total)
+                </h4>
+                <p className="text-xs text-gray-600 mb-3">All {livestock.imageLabels?.length || 0} images will be used for AI health analysis:</p>
+                <div className="grid grid-cols-3 gap-3">
+                  {livestock.imageLabels && livestock.imageLabels.map((img, idx) => (
+                    <div key={idx} className="relative bg-white rounded-lg border-2 border-emerald-300 overflow-hidden shadow-sm">
+                      <img src={img.url} alt={`${img.label}`} className="w-full h-24 object-cover" />
+                      <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-xs px-2 py-1 text-center font-semibold capitalize">
+                        📷 {img.label}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-emerald-700 mt-3 font-medium">✓ All images ready for comprehensive health analysis</p>
+              </div>
+            )}
+
+            {/* Action Buttons */}
+            <div className="flex gap-3">
+              <button
+                onClick={onClose}
+                className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-900 py-3 rounded-lg font-bold transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={submitAnalysis}
+                disabled={images.length === 0 || analyzing}
+                className="flex-1 bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-400 text-white py-3 rounded-lg font-bold flex items-center justify-center gap-2 transition-colors"
+              >
+                {analyzing ? (
+                  <>
+                    <Loader className="w-5 h-5 animate-spin" />
+                    Analyzing...
+                  </>
+                ) : (
+                  '🚀 Get Health Report'
+                )}
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            {/* Health Report */}
+            {healthReport && (
+              <div className="space-y-6">
+                <div className="bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-2xl p-8 text-center border-2 border-emerald-200">
+                  <div className="text-6xl mb-4">✅</div>
+                  <h4 className="text-2xl font-black text-emerald-900 mb-2">Analysis Complete!</h4>
+                  <p className="text-emerald-700 font-medium">Health Score Report</p>
+                </div>
+
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="bg-white rounded-xl p-4 border-2 border-emerald-200 text-center">
+                    <div className="text-3xl font-black text-emerald-600 mb-1">{healthReport.healthScore}</div>
+                    <p className="text-sm text-gray-600 font-medium">Health Score</p>
+                  </div>
+                  <div className="bg-white rounded-xl p-4 border-2 border-emerald-200 text-center">
+                    <div className="text-2xl mb-1">
+                      {healthReport.healthStatus === 'healthy' ? '🟢' : healthReport.healthStatus === 'moderate' ? '🟡' : '🔴'}
+                    </div>
+                    <p className="text-sm text-gray-600 font-medium capitalize">{healthReport.healthStatus}</p>
+                  </div>
+                  <div className="bg-white rounded-xl p-4 border-2 border-emerald-200 text-center">
+                    <div className="text-2xl mb-1">✓</div>
+                    <p className="text-sm text-gray-600 font-medium">Verified</p>
+                  </div>
+                </div>
+
+                {healthReport.healthAnalysis && (
+                  <div className="bg-gray-50 rounded-xl p-6 border border-gray-200">
+                    <h5 className="font-bold text-gray-900 mb-3">Analysis Details</h5>
+                    <p className="text-gray-700 text-sm leading-relaxed whitespace-pre-wrap">
+                      {healthReport.healthAnalysis}
+                    </p>
+                  </div>
+                )}
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={onClose}
+                    className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-lg font-bold transition-colors"
+                  >
+                    Done
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
       </motion.div>
-    </motion.div>
-  </AnimatePresence>
-)
+    </div>
+  )
+}
 
 const LivestockDetails = () => {
   const { id } = useParams()
@@ -89,14 +439,42 @@ const LivestockDetails = () => {
     </div>
   )
 
-  const images = livestock.images?.length > 0
-    ? livestock.images
-    : [`https://source.unsplash.com/800x600/?${livestock.animalType?.toLowerCase()},farm`]
+  const images = (() => {
+    // Show only Front and Side images from imageLabels (if they exist)
+    if (livestock.imageLabels && Array.isArray(livestock.imageLabels) && livestock.imageLabels.length > 0) {
+      const frontSideImages = livestock.imageLabels
+        .filter(il => ['front', 'side'].includes(il.label))
+        .map(il => il.url)
+      // If we found front/side images, return them
+      if (frontSideImages.length > 0) return frontSideImages
+      
+      // If no front/side labels found but imageLabels exist, return all labeled images
+      if (livestock.imageLabels.length > 0) {
+        return livestock.imageLabels.map(il => il.url)
+      }
+    }
+    
+    // Fallback to all images or placeholder
+    return livestock.images?.length > 0
+      ? livestock.images
+      : [`https://source.unsplash.com/800x600/?${livestock.animalType?.toLowerCase()},farm`]
+  })()
 
   return (
     <div className="min-h-screen bg-gray-50">
       <Navbar />
-      {showModal && <HealthScanModal livestockId={livestock._id} onClose={() => setShowModal(false)} />}
+      {showModal && (
+        <HealthScanModal
+          livestock={livestock}
+          onClose={() => setShowModal(false)}
+          onComplete={() => {
+            // Refresh livestock data to get updated health score
+            api.get(`/livestock/${id}`)
+              .then(res => setLivestock(res.data.data))
+              .catch(err => console.error('Failed to refresh:', err))
+          }}
+        />
+      )}
 
       <div className="pt-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -218,12 +596,18 @@ const LivestockDetails = () => {
                     <p className="text-gray-600 text-sm mb-4">
                       <strong>Status:</strong> Pending AI Scan — This animal has not been health-verified yet.
                     </p>
-                    <button
-                      onClick={() => setShowModal(true)}
-                      className="btn-primary text-sm py-2.5"
-                    >
-                      Get Health Score
-                    </button>
+                    {user && user._id === livestock.farmerId._id ? (
+                      <button
+                        onClick={() => setShowModal(true)}
+                        className="btn-primary text-sm py-2.5"
+                      >
+                        Get Health Score
+                      </button>
+                    ) : (
+                      <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800">
+                        <p className="font-medium">🔒 Only the livestock owner can request health analysis.</p>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

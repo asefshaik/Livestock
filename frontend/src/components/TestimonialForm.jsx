@@ -57,7 +57,7 @@ const TestimonialForm = ({ isOpen, onClose, onSuccess }) => {
           <div className="flex justify-between items-start mb-6">
             <div>
               <h2 className="text-2xl font-black text-gray-900">Share Your Experience</h2>
-              <p className="text-gray-500 text-sm mt-1">Help others by sharing your PashuBazaar story</p>
+              <p className="text-gray-500 text-sm mt-1">Help others by sharing your LiveHub story</p>
             </div>
             <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full text-gray-400 hover:text-gray-600">
               <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -128,7 +128,7 @@ const TestimonialForm = ({ isOpen, onClose, onSuccess }) => {
                 value={formData.message}
                 onChange={(e) => setFormData({ ...formData, message: e.target.value })}
                 className="w-full bg-gray-50 border-none rounded-2xl px-4 py-3 text-gray-900 focus:ring-2 focus:ring-emerald-500 transition-all font-medium resize-none"
-                placeholder="Tell us about your experience selling or buying on PashuBazaar..."
+                placeholder="Tell us about your experience selling or buying on LiveHub..."
               />
             </div>
 

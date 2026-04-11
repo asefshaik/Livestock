@@ -11,11 +11,27 @@ const LivestockCard = ({ livestock }) => {
     price,
     location,
     images,
+    imageLabels,
     isHealthVerified,
     farmerId,
   } = livestock
 
-  const imageUrl = images?.[0] || `https://source.unsplash.com/400x300/?${animalType?.toLowerCase()},farm`
+  // Get front view image or first image
+  const getFrontImage = () => {
+    // First, try imageLabels if structured correctly
+    if (imageLabels && Array.isArray(imageLabels) && imageLabels.length > 0) {
+      const frontImage = imageLabels.find(il => il.label === 'front')
+      if (frontImage?.url) return frontImage.url
+      // If no front label, return first labeled image
+      if (imageLabels[0]?.url) return imageLabels[0].url
+    }
+    // Fallback to first image
+    if (images && images.length > 0) return images[0]
+    // Last resort: unsplash placeholder
+    return `https://source.unsplash.com/400x300/?${animalType?.toLowerCase()},farm`
+  }
+
+  const imageUrl = getFrontImage()
 
   return (
     <motion.div

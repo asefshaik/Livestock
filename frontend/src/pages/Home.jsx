@@ -33,8 +33,8 @@ const features = [
 
 // Static sample just in case, but we will fetch from API
 const sampleTestimonials = [
-  { name: 'Rajesh Kumar', role: 'Dairy Farmer, Punjab', message: 'PashuBazaar transformed how I sell my cattle. The AI health scores build trust instantly with buyers!', avatar: 'R' },
-  { name: 'Priya Sharma', role: 'Livestock Buyer, Maharashtra', message: "I've bought 3 animals through PashuBazaar. The verified health scores gave me confidence I never had before.", avatar: 'P' },
+  { name: 'Rajesh Kumar', role: 'Dairy Farmer, Punjab', message: 'LiveHub transformed how I sell my cattle. The AI health scores build trust instantly with buyers!', avatar: 'R' },
+  { name: 'Priya Sharma', role: 'Livestock Buyer, Maharashtra', message: "I've bought 3 animals through LiveHub. The verified health scores gave me confidence I never had before.", avatar: 'P' },
   { name: 'Amit Singh', role: 'Goat Farmer, Rajasthan', message: "Listed my goats and got inquiries within hours. The platform is simple, professional, and it actually works.", avatar: 'A' },
 ]
 
@@ -203,7 +203,7 @@ const Home = () => {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
             >
-              Why Choose PashuBazaar?
+              Why Choose LiveHub?
             </motion.h2>
             <p className="section-subtitle mx-auto">
               We're building the future of livestock trading — transparent, AI-verified, and fraud-free.
@@ -291,7 +291,7 @@ const Home = () => {
           <div className="flex flex-col md:flex-row items-center justify-between gap-6 mb-16">
             <div className="text-center md:text-left">
               <h2 className="text-4xl font-black text-gray-900 mb-4">Trusted by Farmers & Buyers</h2>
-              <p className="text-gray-500 text-lg">Real stories from the PashuBazaar community</p>
+              <p className="text-gray-500 text-lg">Real stories from the LiveHub community</p>
             </div>
             {user ? (
               <button 

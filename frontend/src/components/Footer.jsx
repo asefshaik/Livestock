@@ -13,7 +13,7 @@ const Footer = () => {
               <div className="w-9 h-9 bg-emerald-600 rounded-xl flex items-center justify-center">
                 <span className="text-white text-lg">🐄</span>
               </div>
-              <span className="font-bold text-xl">Pashu<span className="text-emerald-400">Bazaar</span></span>
+              <span className="font-bold text-xl">Live<span className="text-emerald-400">Hub</span></span>
             </div>
             <p className="text-gray-400 leading-relaxed max-w-sm">
               India's first AI-powered livestock marketplace. Buy and sell verified, healthy animals with complete confidence.
@@ -38,24 +38,23 @@ const Footer = () => {
               ) : !user && (
                 <li><Link to="/register" className="hover:text-emerald-400 transition-colors">Sell Livestock</Link></li>
               )}
-              <li><a href="#" className="hover:text-emerald-400 transition-colors">How It Works</a></li>
-              <li><a href="#" className="hover:text-emerald-400 transition-colors">Pricing</a></li>
+              <li><Link to="/how-it-works" className="hover:text-emerald-400 transition-colors">How It Works</Link></li>
             </ul>
           </div>
 
           <div>
             <h4 className="font-semibold text-white mb-4">Company</h4>
             <ul className="space-y-2 text-gray-400">
-              <li><a href="#" className="hover:text-emerald-400 transition-colors">About Us</a></li>
-              <li><a href="#" className="hover:text-emerald-400 transition-colors">Contact</a></li>
-              <li><a href="#" className="hover:text-emerald-400 transition-colors">Privacy Policy</a></li>
-              <li><a href="#" className="hover:text-emerald-400 transition-colors">Terms of Service</a></li>
+              <li><Link to="/about" className="hover:text-emerald-400 transition-colors">About Us</Link></li>
+              <li><Link to="/contact" className="hover:text-emerald-400 transition-colors">Contact</Link></li>
+              <li><Link to="/privacy" className="hover:text-emerald-400 transition-colors">Privacy Policy</Link></li>
+              <li><Link to="/terms" className="hover:text-emerald-400 transition-colors">Terms of Service</Link></li>
             </ul>
           </div>
         </div>
 
         <div className="border-t border-gray-800 mt-12 pt-8 flex flex-col md:flex-row items-center justify-between gap-4">
-          <p className="text-gray-500 text-sm">© 2026 PashuBazaar. All rights reserved.</p>
+          <p className="text-gray-500 text-sm">© 2026 LiveHub. All rights reserved.</p>
           <div className="flex items-center gap-2 text-sm text-gray-500">
             <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
             AI Health Score System — Powered by Mobile Scanning App

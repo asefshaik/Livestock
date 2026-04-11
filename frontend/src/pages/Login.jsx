@@ -46,7 +46,7 @@ const Login = () => {
         <div className="relative text-white max-w-md">
           <Link to="/" className="flex items-center gap-2 mb-12">
             <div className="w-10 h-10 bg-white/20 backdrop-blur rounded-xl flex items-center justify-center">🐄</div>
-            <span className="font-bold text-2xl">Pashu<span className="text-emerald-300">Bazaar</span></span>
+            <span className="font-bold text-2xl">Live<span className="text-emerald-300">Hub</span></span>
           </Link>
           <h2 className="text-4xl font-black leading-tight mb-4">
             India's AI-Powered<br />Livestock Marketplace
@@ -70,7 +70,7 @@ const Login = () => {
           {/* Mobile logo */}
           <Link to="/" className="flex items-center gap-2 mb-8 lg:hidden">
             <div className="w-8 h-8 bg-emerald-600 rounded-lg flex items-center justify-center">🐄</div>
-            <span className="font-bold text-xl">Pashu<span className="text-emerald-600">Bazaar</span></span>
+            <span className="font-bold text-xl">Live<span className="text-emerald-600">Hub</span></span>
           </Link>
 
           <div className="bg-white rounded-3xl shadow-card p-8">

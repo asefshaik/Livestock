@@ -41,7 +41,7 @@ const Navbar = () => {
             <span className={`font-bold text-xl ${
               scrolled || !isHomepage ? 'text-gray-900' : 'text-white'
             }`}>
-              Pashu<span className="text-emerald-500">Bazaar</span>
+              Live<span className="text-emerald-500">Hub</span>
             </span>
           </Link>
 
